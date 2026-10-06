@@ -288,7 +288,7 @@
                     <li>Размер шрифта данных будет изменён на выбранный</li>
                     <li>Границы страниц считаются по ширине столбцов, высоте строк и полям листа</li>
                     <li>Добавится маркировка «СЕКЦИЯ 1, 2, 3...» сверху и «СТРОКА 1, 2, 3...» слева — ровно по этим границам</li>
-                    <li>На местах сгибов появятся жирные красные линии, и те же границы запишутся как разрывы страниц Excel</li>
+                    <li>Границы сгибов запишутся как разрывы страниц Excel: их видно в разметке, на бумагу они не печатаются</li>
                     <li>Маркировка будет автоматически повторяться на каждой странице при печати</li>
                     <li>Вся обработка происходит локально — ваши данные в безопасности</li>
                 </ul>
@@ -297,7 +297,7 @@
 
         <div class="footer">
             <p>Сделано с ❤️ для удобной печати больших таблиц</p>
-            <p>Версия 1.4</p>
+            <p>Версия 1.5</p>
         </div>
     </div>
 
@@ -495,12 +495,6 @@
             cell.font = font;
             cell.fill = fill;
             cell.alignment = alignment;
-        }
-
-        function setEdge(cell, edge) {
-            const border = Object.assign({}, cell.border || {});
-            border[edge] = { style: 'thick', color: { argb: 'FFFF0000' } };
-            cell.border = border;
         }
 
         function insertColBreaksXml(xml, block) {
@@ -856,26 +850,8 @@
             corner.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
             corner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7FAFC' } };
 
-            for (let s = 0; s < sections.length; s++) {
-                if (s > 0) {
-                    const col = sections[s][0];
-                    for (let r = 1; r <= lastDataRow; r++) setEdge(worksheet.getCell(r, col), 'left');
-                }
-                if (s < sections.length - 1) {
-                    const col = sections[s][1];
-                    for (let r = 1; r <= lastDataRow; r++) setEdge(worksheet.getCell(r, col), 'right');
-                }
-            }
-            for (let p = 0; p < pages.length; p++) {
-                if (p > 0) {
-                    const row = pages[p][0];
-                    for (let c = 1; c <= lastDataCol; c++) setEdge(worksheet.getCell(row, c), 'top');
-                }
-                if (p < pages.length - 1) {
-                    const row = pages[p][1];
-                    for (let c = 1; c <= lastDataCol; c++) setEdge(worksheet.getCell(row, c), 'bottom');
-                    worksheet.getRow(row).addPageBreak();
-                }
+            for (let p = 0; p < pages.length - 1; p++) {
+                worksheet.getRow(pages[p][1]).addPageBreak();
             }
 
             worksheet.pageSetup = {
