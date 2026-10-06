@@ -1,913 +1,312 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📚 Excel Harmonica Book Maker</title>
-    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
-    <style>
-        :root {
-            --primary: #667eea;
-            --primary-dark: #5568d3;
-            --secondary: #764ba2;
-            --success: #11998e;
-            --success-light: #38ef7d;
-            --warning: #f093fb;
-            --danger: #ff6b6b;
-            --dark: #2d3748;
-            --light: #f7fafc;
-            --gray: #718096;
-            --border: #e2e8f0;
-            --shadow: 0 10px 40px rgba(0,0,0,0.1);
-            --shadow-lg: 0 20px 60px rgba(0,0,0,0.15);
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-            background-size: 400% 400%;
-            animation: gradientShift 15s ease infinite;
-            min-height: 100vh;
-            padding: 20px;
-            color: var(--dark);
-            line-height: 1.6;
-        }
-        @keyframes gradientShift {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-        .container { max-width: 900px; margin: 0 auto; }
-        .header { text-align: center; color: white; margin-bottom: 30px; padding: 20px; }
-        .header h1 {
-            font-size: 2.5em; font-weight: 800; margin-bottom: 10px;
-            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            display: flex; align-items: center; justify-content: center; gap: 15px; flex-wrap: wrap;
-        }
-        .header .logo { font-size: 1.2em; animation: bounce 2s ease infinite; }
-        @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
-        }
-        .header p { font-size: 1.1em; opacity: 0.95; text-shadow: 0 1px 5px rgba(0,0,0,0.2); }
-        .card {
-            background: rgba(255,255,255,0.98); backdrop-filter: blur(10px);
-            border-radius: 20px; padding: 40px; box-shadow: var(--shadow-lg);
-            margin-bottom: 20px; animation: fadeInUp 0.6s ease;
-        }
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .drop-zone {
-            border: 3px dashed var(--border); border-radius: 15px; padding: 50px 20px;
-            text-align: center; cursor: pointer; transition: all 0.3s ease;
-            background: var(--light); margin-bottom: 25px;
-        }
-        .drop-zone:hover, .drop-zone.dragover {
-            border-color: var(--primary); background: rgba(102,126,234,0.05); transform: scale(1.02);
-        }
-        .drop-zone.has-file { border-color: var(--success); background: rgba(17,153,142,0.05); }
-        .drop-zone-icon { font-size: 4em; margin-bottom: 15px; display: block; }
-        .drop-zone-text { font-size: 1.1em; color: var(--gray); margin-bottom: 10px; }
-        .drop-zone-hint { font-size: 0.9em; color: var(--gray); opacity: 0.7; }
-        .file-name {
-            margin-top: 15px; padding: 10px 20px; background: var(--success); color: white;
-            border-radius: 10px; display: inline-block; font-weight: 600; animation: fadeIn 0.3s ease;
-        }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .settings-grid {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px; margin-bottom: 25px;
-        }
-        .input-group { display: flex; flex-direction: column; }
-        .input-group label {
-            font-weight: 600; color: var(--dark); margin-bottom: 8px; font-size: 0.95em;
-            display: flex; align-items: center; gap: 8px;
-        }
-        .input-group label .icon { font-size: 1.2em; }
-        input[type="number"], select {
-            padding: 12px 15px; border: 2px solid var(--border); border-radius: 10px;
-            font-size: 1em; transition: all 0.3s ease; background: white; font-family: inherit;
-        }
-        input[type="number"]:focus, select:focus {
-            outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
-        }
-        .btn {
-            width: 100%; padding: 16px; border: none; border-radius: 12px; font-size: 1.1em;
-            font-weight: 700; cursor: pointer; transition: all 0.3s ease;
-            display: flex; align-items: center; justify-content: center; gap: 10px; font-family: inherit;
-        }
-        .btn-primary {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-            color: white; box-shadow: 0 4px 15px rgba(102,126,234,0.4);
-        }
-        .btn-primary:hover:not(:disabled) {
-            transform: translateY(-2px); box-shadow: 0 6px 25px rgba(102,126,234,0.5);
-        }
-        .btn-success {
-            background: linear-gradient(135deg, var(--success) 0%, var(--success-light) 100%);
-            color: white; box-shadow: 0 4px 15px rgba(17,153,142,0.4); margin-top: 15px;
-        }
-        .btn-success:hover { transform: translateY(-2px); box-shadow: 0 6px 25px rgba(17,153,142,0.5); }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
-        .progress-container {
-            margin-top: 25px; padding: 25px; background: var(--light);
-            border-radius: 15px; display: none; animation: fadeIn 0.3s ease;
-        }
-        .progress-container.active { display: block; }
-        .progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-        .progress-status { font-weight: 600; color: var(--dark); display: flex; align-items: center; gap: 10px; }
-        .spinner {
-            width: 20px; height: 20px; border: 3px solid var(--border);
-            border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .progress-percent { font-weight: 700; color: var(--primary); font-size: 1.1em; }
-        .progress-bar {
-            width: 100%; height: 12px; background: var(--border);
-            border-radius: 10px; overflow: hidden; position: relative;
-        }
-        .progress-fill {
-            height: 100%; background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
-            width: 0%; transition: width 0.3s ease; border-radius: 10px;
-            position: relative; overflow: hidden;
-        }
-        .progress-fill::after {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-            animation: shimmer 2s infinite;
-        }
-        @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
-        .stats {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px; margin-top: 20px; padding-top: 20px; border-top: 2px solid var(--border);
-        }
-        .stat-item {
-            text-align: center; padding: 15px; background: white;
-            border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        }
-        .stat-value { font-size: 2em; font-weight: 800; color: var(--primary); line-height: 1; }
-        .stat-label { font-size: 0.85em; color: var(--gray); margin-top: 5px; font-weight: 500; }
-        .toast-container {
-            position: fixed; top: 20px; right: 20px; z-index: 1000;
-            display: flex; flex-direction: column; gap: 10px;
-        }
-        .toast {
-            background: white; padding: 15px 20px; border-radius: 12px; box-shadow: var(--shadow);
-            display: flex; align-items: center; gap: 12px; min-width: 300px; max-width: 400px;
-            animation: slideIn 0.3s ease; border-left: 4px solid var(--primary);
-        }
-        .toast.success { border-left-color: var(--success); }
-        .toast.error { border-left-color: var(--danger); }
-        .toast.warning { border-left-color: var(--warning); }
-        @keyframes slideIn {
-            from { transform: translateX(400px); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-        .toast-icon { font-size: 1.5em; }
-        .toast-content { flex: 1; }
-        .toast-title { font-weight: 700; color: var(--dark); margin-bottom: 2px; }
-        .toast-message { font-size: 0.9em; color: var(--gray); }
-        .info-card {
-            background: linear-gradient(135deg, rgba(102,126,234,0.05) 0%, rgba(118,75,162,0.05) 100%);
-            border: 2px solid rgba(102,126,234,0.1); border-radius: 15px; padding: 25px; margin-top: 20px;
-        }
-        .info-card h3 {
-            color: var(--dark); margin-bottom: 15px;
-            display: flex; align-items: center; gap: 10px; font-size: 1.2em;
-        }
-        .info-card ul { list-style: none; padding: 0; }
-        .info-card li { padding: 8px 0; padding-left: 30px; position: relative; color: var(--gray); }
-        .info-card li::before {
-            content: '✓'; position: absolute; left: 0; color: var(--success);
-            font-weight: bold; font-size: 1.2em;
-        }
-        .footer { text-align: center; color: white; padding: 20px; opacity: 0.9; font-size: 0.9em; }
-        .footer a { color: white; text-decoration: underline; }
-        @media (max-width: 600px) {
-            .header h1 { font-size: 1.8em; }
-            .card { padding: 25px; }
-            .drop-zone { padding: 30px 15px; }
-            .drop-zone-icon { font-size: 3em; }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Таблица → книга-гармошка</title>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<style>
+:root{--bg:#f5f2ec;--ink:#1d2528;--mut:#6b7378;--line:#d9d4c8;--card:#fffdf9;--red:#d63a2b}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:32px 16px 64px}
+main{max-width:760px;margin:0 auto}
+h1{font:700 34px/1.15 Georgia,"Times New Roman",serif;letter-spacing:-.01em}
+.lead{color:var(--mut);margin:10px 0 24px;max-width:56ch}
+.fold{display:block;width:100%;height:34px;margin-bottom:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:24px;margin-bottom:16px}
+.drop{display:block;border:2px dashed var(--line);border-radius:8px;padding:34px 16px;text-align:center;cursor:pointer;transition:.15s}
+.drop:hover,.drop.on{border-color:var(--red);background:#fff4f1}
+.drop b{display:block;font-size:17px}.drop span{color:var(--mut);font-size:14px}
+.drop.ok{border-style:solid;border-color:#2e7d5b;background:#f1faf5}
+input[type=file]{display:none}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+label.f{display:block;font-size:13px;color:var(--mut)}
+label.f input,label.f select{display:block;width:100%;margin-top:4px;padding:9px 10px;font:inherit;color:var(--ink);border:1px solid var(--line);border-radius:6px;background:#fff}
+label.f small{display:block;margin-top:3px;font-size:12px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin-bottom:14px}
+button{font:600 16px inherit;font-family:inherit;width:100%;padding:14px;border:0;border-radius:8px;background:var(--ink);color:#fff;cursor:pointer}
+button:hover:not(:disabled){background:var(--red)}button:disabled{opacity:.35;cursor:not-allowed}
+.res{display:none}.res.on{display:block}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 18px}
+.stat{flex:1;min-width:120px;padding:12px;background:var(--bg);border-radius:8px}
+.stat b{display:block;font:700 26px Georgia,serif}.stat span{font-size:13px;color:var(--mut)}
+ol{padding-left:20px;color:var(--ink)}li{margin:4px 0}
+.err{display:none;background:#fdecea;color:#8a1f14;border-radius:8px;padding:12px 14px;margin-bottom:16px}.err.on{display:block}
+a.dl{display:block;text-align:center;text-decoration:none;font-weight:600;background:var(--red);color:#fff;padding:14px;border-radius:8px;margin-bottom:18px}
+#book{display:none}
+.sh{break-after:page;page-break-after:always;color:#000;font-family:Calibri,Carlito,Arial,sans-serif}
+.sh:last-child{break-after:auto;page-break-after:auto}
+.sh table{table-layout:fixed;border-collapse:collapse}
+.sh td{border:.25mm solid #000;padding:.3mm 1mm;text-align:left;vertical-align:middle;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.2}
+.sh .n td{font:700 12pt Arial,sans-serif;text-align:center;background:#e8e4da;border-bottom:.6mm solid #000;white-space:nowrap}
+.sh{position:relative}
+.ft{position:absolute;bottom:0;left:0;right:0;font-size:8pt;text-align:center}
+button.pr{margin-bottom:10px}
+.hint{font-size:13px;color:var(--mut);margin:-4px 0 18px}
+@media print{body{background:#fff;padding:0}main{display:none}#book{display:block}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+<style id="pg"></style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1><span class="logo">📚</span> Excel Harmonica Book Maker</h1>
-            <p>Автоматическая подготовка таблиц для печати в виде книги-гармошки</p>
-        </div>
-
-        <div class="card">
-            <div class="drop-zone" id="dropZone">
-                <span class="drop-zone-icon">📁</span>
-                <div class="drop-zone-text">Перетащите Excel файл сюда или нажмите для выбора</div>
-                <div class="drop-zone-hint">Поддерживается формат .xlsx</div>
-                <div class="file-name" id="fileName" style="display: none;"></div>
-                <input type="file" id="fileInput" accept=".xlsx" style="display: none;">
-            </div>
-
-            <div class="settings-grid">
-                <div class="input-group">
-                    <label for="widthInput"><span class="icon">📏</span> Ширина столбца</label>
-                    <input type="number" id="widthInput" value="15" min="5" max="50">
-                </div>
-                <div class="input-group">
-                    <label for="dataFontSize"><span class="icon">📝</span> Размер шрифта данных</label>
-                    <select id="dataFontSize">
-                        <option value="8">8 пунктов (мелкий)</option>
-                        <option value="10" selected>10 пунктов (стандарт)</option>
-                        <option value="11">11 пунктов (чуть крупнее)</option>
-                        <option value="12">12 пунктов (крупный)</option>
-                        <option value="14">14 пунктов (очень крупный)</option>
-                        <option value="0">Не менять (как в оригинале)</option>
-                    </select>
-                </div>
-                <div class="input-group">
-                    <label for="paperSize"><span class="icon">📄</span> Формат бумаги</label>
-                    <select id="paperSize">
-                        <option value="A4">A4 (210×297 мм)</option>
-                        <option value="A3">A3 (297×420 мм)</option>
-                        <option value="Letter">Letter (216×279 мм)</option>
-                    </select>
-                </div>
-                <div class="input-group">
-                    <label for="orientation"><span class="icon">🔄</span> Ориентация</label>
-                    <select id="orientation">
-                        <option value="landscape">Альбомная</option>
-                        <option value="portrait">Книжная</option>
-                    </select>
-                </div>
-            </div>
-
-            <button class="btn btn-primary" id="processBtn" onclick="processFile()">
-                <span>✨</span> Обработать файл
-            </button>
-
-            <div class="progress-container" id="progress">
-                <div class="progress-header">
-                    <div class="progress-status">
-                        <div class="spinner"></div>
-                        <span id="status">Обработка...</span>
-                    </div>
-                    <div class="progress-percent" id="progressPercent">0%</div>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressFill"></div>
-                </div>
-                <div class="stats" id="stats" style="display: none;">
-                    <div class="stat-item">
-                        <div class="stat-value" id="statSections">0</div>
-                        <div class="stat-label">Секций</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="statPages">0</div>
-                        <div class="stat-label">Страниц</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="statSheets">0</div>
-                        <div class="stat-label">Листов</div>
-                    </div>
-                </div>
-            </div>
-
-            <button class="btn btn-success" id="downloadBtn" onclick="downloadResult()" style="display: none;">
-                <span>⬇️</span> Скачать результат
-            </button>
-        </div>
-
-        <div class="card">
-            <div class="info-card">
-                <h3><span>💡</span> Как это работает</h3>
-                <ul>
-                    <li>Все столбцы (кроме первого) станут одинаковой ширины</li>
-                    <li>Размер шрифта данных будет изменён на выбранный</li>
-                    <li>Границы страниц считаются по ширине столбцов, высоте строк и полям листа</li>
-                    <li>Добавится маркировка «СЕКЦИЯ 1, 2, 3...» сверху и «СТРОКА 1, 2, 3...» слева — ровно по этим границам</li>
-                    <li>Границы сгибов запишутся как разрывы страниц Excel: их видно в разметке, на бумагу они не печатаются</li>
-                    <li>Маркировка будет автоматически повторяться на каждой странице при печати</li>
-                    <li>Вся обработка происходит локально — ваши данные в безопасности</li>
-                </ul>
-            </div>
-        </div>
-
-        <div class="footer">
-            <p>Сделано с ❤️ для удобной печати больших таблиц</p>
-            <p>Версия 1.5</p>
-        </div>
-    </div>
-
-    <div class="toast-container" id="toastContainer"></div>
-
-    <script>
-        let processedWorkbook = null;
-        let originalFileName = '';
-        let selectedFile = null;
-
-        const paperSizes = {
-            'A4': { width: 297, height: 210, paperCode: 9 },
-            'A3': { width: 420, height: 297, paperCode: 8 },
-            'Letter': { width: 279, height: 216, paperCode: 1 }
-        };
-        const PAGE_MARGIN_IN = 0.5;
-        const LABEL_COL_WIDTH = 18;
-        const HEADER_ROW_HEIGHT = 34;
-
-        const dropZone = document.getElementById('dropZone');
-        const fileInput = document.getElementById('fileInput');
-        const fileName = document.getElementById('fileName');
-
-        dropZone.addEventListener('click', () => fileInput.click());
-        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
-        dropZone.addEventListener('dragleave', () => { dropZone.classList.remove('dragover'); });
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
-        });
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) handleFile(e.target.files[0]);
-        });
-
-        function handleFile(file) {
-            if (!/\.xlsx$/i.test(file.name)) {
-                showToast('error', 'Неверный формат', 'Пожалуйста, выберите файл .xlsx');
-                return;
-            }
-            selectedFile = file;
-            fileName.textContent = '✓ ' + file.name;
-            fileName.style.display = 'inline-block';
-            dropZone.classList.add('has-file');
-            showToast('success', 'Файл выбран', file.name);
-        }
-
-        function showToast(type, title, message) {
-            const container = document.getElementById('toastContainer');
-            const toast = document.createElement('div');
-            toast.className = 'toast ' + type;
-            const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
-            toast.innerHTML = '<div class="toast-icon">' + icons[type] + '</div>' +
-                '<div class="toast-content"><div class="toast-title">' + title + '</div>' +
-                '<div class="toast-message">' + message + '</div></div>';
-            container.appendChild(toast);
-            setTimeout(() => {
-                toast.style.animation = 'slideIn 0.3s ease reverse';
-                setTimeout(() => toast.remove(), 300);
-            }, 4000);
-        }
-
-        function updateProgress(percent, status) {
-            document.getElementById('progressFill').style.width = percent + '%';
-            document.getElementById('progressPercent').textContent = Math.round(percent) + '%';
-            if (status) document.getElementById('status').textContent = status;
-        }
-
-        async function processFile() {
-            if (!selectedFile) {
-                showToast('warning', 'Файл не выбран', 'Пожалуйста, выберите Excel файл');
-                return;
-            }
-            const columnWidth = parseInt(document.getElementById('widthInput').value);
-            if (columnWidth < 5 || columnWidth > 50) {
-                showToast('error', 'Неверная ширина', 'Ширина столбца должна быть от 5 до 50');
-                return;
-            }
-            const dataFontSize = parseInt(document.getElementById('dataFontSize').value);
-            const paperSize = document.getElementById('paperSize').value;
-            const orientation = document.getElementById('orientation').value;
-            const processBtn = document.getElementById('processBtn');
-            const progress = document.getElementById('progress');
-            const downloadBtn = document.getElementById('downloadBtn');
-            const stats = document.getElementById('stats');
-
-            processBtn.disabled = true;
-            downloadBtn.style.display = 'none';
-            stats.style.display = 'none';
-            progress.classList.add('active');
-            updateProgress(10, 'Чтение файла...');
-
-            try {
-                const arrayBuffer = await selectedFile.arrayBuffer();
-                originalFileName = selectedFile.name.replace(/\.xlsx$/i, '');
-                updateProgress(20, 'Загрузка данных...');
-
-                const workbook = new ExcelJS.Workbook();
-                await workbook.xlsx.load(arrayBuffer);
-
-                const totalSheets = workbook.worksheets.length;
-                let currentSheet = 0;
-                let totalSections = 0;
-                let totalPages = 0;
-
-                for (const worksheet of workbook.worksheets) {
-                    currentSheet++;
-                    updateProgress(20 + (currentSheet / totalSheets) * 60,
-                        'Обработка листа ' + currentSheet + ' из ' + totalSheets + ': ' + worksheet.name);
-                    const result = await processSheet(worksheet, columnWidth, dataFontSize, paperSize, orientation);
-                    totalSections += result.sections;
-                    totalPages += result.pages;
-                }
-
-                updateProgress(90, 'Сохранение результата...');
-                processedWorkbook = workbook;
-
-                document.getElementById('statSections').textContent = totalSections;
-                document.getElementById('statPages').textContent = totalPages;
-                document.getElementById('statSheets').textContent = totalSheets;
-                stats.style.display = 'grid';
-
-                updateProgress(100, 'Готово!');
-                downloadBtn.style.display = 'flex';
-                showToast('success', 'Обработка завершена', 'Файл готов к скачиванию');
-            } catch (error) {
-                console.error(error);
-                showToast('error', 'Ошибка обработки', error.message);
-                updateProgress(0, 'Ошибка');
-            } finally {
-                processBtn.disabled = false;
-            }
-        }
-
-        function cellPlainText(value) {
-            if (value == null) return '';
-            if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-                return String(value);
-            }
-            if (value instanceof Date) return value.toLocaleString('ru-RU');
-            if (Array.isArray(value.richText)) {
-                return value.richText.map(part => part.text || '').join('');
-            }
-            if (value.hyperlink != null && value.text != null) return String(value.text);
-            if (Object.prototype.hasOwnProperty.call(value, 'result')) return cellPlainText(value.result);
-            return '';
-        }
-
-        function columnWidthToMm(width) {
-            const safe = (typeof width === 'number' && width > 0) ? width : 8.43;
-            const px = safe < 1 ? Math.floor(safe * 12) : Math.floor(safe * 7 + 5);
-            return px * 25.4 / 96;
-        }
-
-        function rowHeightToMm(height) {
-            const safe = (typeof height === 'number' && height > 0) ? height : 15;
-            return safe * 25.4 / 72;
-        }
-
-        function estimateRowHeight(text, colWidth, fontSize) {
-            const size = fontSize > 0 ? fontSize : 11;
-            const width = Math.max(colWidth || 8.43, 1);
-            const charsPerLine = Math.max(1, Math.floor(width * (11 / size)));
-            const parts = String(text).split(/\r\n|\n|\r/);
-            let lines = 0;
-            for (let i = 0; i < parts.length; i++) {
-                lines += Math.max(1, Math.ceil(parts[i].length / charsPerLine));
-            }
-            return Math.max(15, Math.ceil(lines * size * 1.25));
-        }
-
-        function packBySize(start, end, sizeOf, limit, overhead) {
-            const ranges = [];
-            let index = start;
-            while (index <= end) {
-                const rangeStart = index;
-                let used = overhead;
-                while (index <= end) {
-                    const size = sizeOf(index);
-                    if (index > rangeStart && used + size > limit) break;
-                    used += size;
-                    index += 1;
-                }
-                ranges.push([rangeStart, index - 1]);
-            }
-            return ranges;
-        }
-
-        function writeLabel(worksheet, row, col, endRow, endCol, value, font, fill, alignment) {
-            if (endRow > row || endCol > col) {
-                worksheet.mergeCells(row, col, endRow, endCol);
-            }
-            const cell = worksheet.getCell(row, col);
-            cell.value = value;
-            cell.font = font;
-            cell.fill = fill;
-            cell.alignment = alignment;
-        }
-
-        function insertColBreaksXml(xml, block) {
-            if (xml.includes('<colBreaks')) {
-                return xml.replace(/<colBreaks\b[\s\S]*?<\/colBreaks>/, block);
-            }
-            const anchors = ['</rowBreaks>', '<drawing ', '<legacyDrawing', '<picture ', '<tableParts', '<extLst', '</worksheet>'];
-            for (let i = 0; i < anchors.length; i++) {
-                const anchor = anchors[i];
-                const at = xml.indexOf(anchor);
-                if (at === -1) continue;
-                if (anchor.charAt(0) === '<') {
-                    if (anchor.charAt(1) === '/') {
-                        const end = at + anchor.length;
-                        return xml.slice(0, end) + block + xml.slice(end);
-                    }
-                    return xml.slice(0, at) + block + xml.slice(at);
-                }
-            }
-            return xml;
-        }
-
-        function decodeXml(text) {
-            return text
-                .replace(/&amp;/g, '&')
-                .replace(/&lt;/g, '<')
-                .replace(/&gt;/g, '>')
-                .replace(/&quot;/g, '"')
-                .replace(/&apos;/g, "'");
-        }
-
-        function sheetXmlPath(target) {
-            let path = String(target).replace(/\\/g, '/');
-            if (path.charAt(0) === '/') path = path.slice(1);
-            if (path.indexOf('xl/') !== 0) path = 'xl/' + path;
-            return path;
-        }
-
-        async function injectColumnBreaks(buffer, workbook) {
-            const jobs = workbook.worksheets.filter(ws => ws._harmonicaColBreaks && ws._harmonicaColBreaks.length);
-            if (!jobs.length) return buffer;
-            if (typeof JSZip === 'undefined') {
-                throw new Error('Библиотека JSZip не загрузилась. Проверьте интернет и откройте страницу ещё раз.');
-            }
-
-            const zip = await JSZip.loadAsync(buffer);
-            const workbookXml = await zip.file('xl/workbook.xml').async('string');
-            const relsXml = await zip.file('xl/_rels/workbook.xml.rels').async('string');
-            const sheetTags = workbookXml.match(/<sheet\b[^>]*\/?>/g) || [];
-            const sheets = sheetTags.map(tag => {
-                const name = tag.match(/\bname="([^"]*)"/);
-                const rid = tag.match(/\br:id="([^"]+)"/);
-                return {
-                    name: name ? decodeXml(name[1]) : '',
-                    rid: rid ? rid[1] : ''
-                };
-            });
-            const rels = {};
-            const relTags = relsXml.match(/<Relationship\b[^>]*\/?>/g) || [];
-            relTags.forEach(tag => {
-                const id = tag.match(/\bId="([^"]+)"/);
-                const target = tag.match(/\bTarget="([^"]+)"/);
-                if (id && target) rels[id[1]] = target[1];
-            });
-
-            for (let i = 0; i < jobs.length; i++) {
-                const worksheet = jobs[i];
-                const sheet = sheets.find(item => item.name === worksheet.name);
-                if (!sheet || !rels[sheet.rid]) {
-                    throw new Error('Не найден лист «' + worksheet.name + '» в файле Excel');
-                }
-                const path = sheetXmlPath(rels[sheet.rid]);
-                const file = zip.file(path);
-                if (!file) throw new Error('Не найден файл листа ' + path);
-                const breaks = worksheet._harmonicaColBreaks;
-                const brks = breaks.map(id => '<brk id="' + id + '" max="1048575" man="1"/>').join('');
-                const block = '<colBreaks count="' + breaks.length + '" manualBreakCount="' + breaks.length + '">' + brks + '</colBreaks>';
-                const xml = insertColBreaksXml(await file.async('string'), block);
-                zip.file(path, xml);
-            }
-
-            return zip.generateAsync({ type: 'arraybuffer' });
-        }
-
-        function columnNumber(letters) {
-            let n = 0;
-            const text = String(letters).toUpperCase();
-            for (let i = 0; i < text.length; i++) {
-                const code = text.charCodeAt(i);
-                if (code < 65 || code > 90) return 0;
-                n = n * 26 + (code - 64);
-            }
-            return n;
-        }
-
-        function columnLetters(n) {
-            let s = '';
-            let num = n;
-            while (num > 0) {
-                const rem = (num - 1) % 26;
-                s = String.fromCharCode(65 + rem) + s;
-                num = Math.floor((num - 1) / 26);
-            }
-            return s;
-        }
-
-        function sheetPrefixMatches(prefix, sheetName) {
-            if (!prefix) return true;
-            let name = prefix.slice(0, -1);
-            if (name.charAt(0) === "'" && name.charAt(name.length - 1) === "'") {
-                name = name.slice(1, -1).replace(/''/g, "'");
-            }
-            return name.toLowerCase() === String(sheetName).toLowerCase();
-        }
-
-        function parseCellRefAt(text, index) {
-            let k = index;
-            let sheet = '';
-            if (text.charAt(k) === "'") {
-                let j = k + 1;
-                while (j < text.length) {
-                    if (text.charAt(j) === "'") {
-                        if (text.charAt(j + 1) === "'") { j += 2; continue; }
-                        j += 1;
-                        break;
-                    }
-                    j += 1;
-                }
-                if (text.charAt(j) !== '!') return null;
-                sheet = text.slice(k, j + 1);
-                k = j + 1;
-            } else if (/[A-Za-z_\u0400-\u04FF]/.test(text.charAt(k))) {
-                const ident = /^[A-Za-z_\u0400-\u04FF][A-Za-z0-9_.\u0400-\u04FF]*/.exec(text.slice(k));
-                if (ident && text.charAt(k + ident[0].length) === '!') {
-                    sheet = ident[0] + '!';
-                    k = k + ident[0].length + 1;
-                }
-            }
-
-            const match = /^(\$?)([A-Za-z]{1,3})(\$?)([1-9][0-9]{0,6})/.exec(text.slice(k));
-            if (!match) return null;
-            const next = k + match[0].length;
-            const nextCh = text.charAt(next);
-            if (nextCh && /[A-Za-z0-9_(]/.test(nextCh)) return null;
-            const col = columnNumber(match[2]);
-            const row = parseInt(match[4], 10);
-            if (!col || col > 16384 || row > 1048576) return null;
-            return {
-                sheet: sheet,
-                colAbs: match[1] === '$',
-                rowAbs: match[3] === '$',
-                col: col,
-                row: row,
-                next: next
-            };
-        }
-
-        function shiftFormulaRefs(formula, dCol, dRow, sheetName) {
-            const text = String(formula);
-            let out = '';
-            let i = 0;
-            while (i < text.length) {
-                if (text.charAt(i) === '"') {
-                    let j = i + 1;
-                    while (j < text.length) {
-                        if (text.charAt(j) === '"') {
-                            if (text.charAt(j + 1) === '"') { j += 2; continue; }
-                            j += 1;
-                            break;
-                        }
-                        j += 1;
-                    }
-                    out += text.slice(i, j);
-                    i = j;
-                    continue;
-                }
-                const ref = parseCellRefAt(text, i);
-                if (!ref) {
-                    out += text.charAt(i);
-                    i += 1;
-                    continue;
-                }
-                if (!sheetPrefixMatches(ref.sheet, sheetName)) {
-                    out += text.slice(i, ref.next);
-                    i = ref.next;
-                    continue;
-                }
-                let col = ref.col + dCol;
-                let row = ref.row + dRow;
-                if (col < 1) col = 1;
-                if (col > 16384) col = 16384;
-                if (row < 1) row = 1;
-                if (row > 1048576) row = 1048576;
-                out += (ref.sheet || '')
-                    + (ref.colAbs ? '$' : '')
-                    + columnLetters(col)
-                    + (ref.rowAbs ? '$' : '')
-                    + row;
-                i = ref.next;
-            }
-            return out;
-        }
-
-        function formulaResultForWrite(result) {
-            if (result == null) return undefined;
-            if (typeof result === 'number' || typeof result === 'string' || typeof result === 'boolean') return result;
-            if (result instanceof Date) return result;
-            if (typeof result === 'object' && result.error) return result;
-            return undefined;
-        }
-
-        function prepareFormulasForInsert(worksheet) {
-            const pending = [];
-            worksheet.eachRow(row => {
-                row.eachCell(cell => {
-                    const kind = cell.formulaType;
-                    if (kind !== 1 && kind !== 2) return;
-                    let formula = '';
-                    try {
-                        formula = cell.formula || '';
-                    } catch (e) {
-                        formula = '';
-                    }
-                    if (!formula) {
-                        const result = formulaResultForWrite(cell.result);
-                        pending.push({ cell: cell, value: result == null ? null : result });
-                        return;
-                    }
-                    pending.push({
-                        cell: cell,
-                        value: {
-                            formula: shiftFormulaRefs(formula, 1, 1, worksheet.name),
-                            result: formulaResultForWrite(cell.result)
-                        }
-                    });
-                });
-            });
-            pending.forEach(item => {
-                item.cell.value = item.value;
-            });
-        }
-
-        async function processSheet(worksheet, columnWidth, dataFontSize, paperSize, orientation) {
-            const lastCol = worksheet.columnCount;
-            const lastRow = worksheet.rowCount;
-            if (lastCol < 2 || lastRow < 1) return { sections: 0, pages: 0 };
-
-            for (let i = 2; i <= lastCol; i++) {
-                worksheet.getColumn(i).width = columnWidth;
-            }
-
-            worksheet.eachRow(row => {
-                row.eachCell(cell => {
-                    if (dataFontSize > 0 && cell.col !== 1) {
-                        if (cell.value && Array.isArray(cell.value.richText)) {
-                            cell.value = {
-                                richText: cell.value.richText.map(part => {
-                                    const font = Object.assign({}, part.font || {}, { size: dataFontSize });
-                                    return Object.assign({}, part, { font: font });
-                                })
-                            };
-                        } else {
-                            const font = Object.assign({}, cell.font || {});
-                            font.size = dataFontSize;
-                            cell.font = font;
-                        }
-                    }
-                    const alignment = Object.assign({}, cell.alignment || {});
-                    alignment.wrapText = true;
-                    if (!alignment.vertical) alignment.vertical = 'top';
-                    cell.alignment = alignment;
-                });
-            });
-
-            worksheet.eachRow(row => {
-                let maxHeight = 15;
-                row.eachCell(cell => {
-                    const text = cellPlainText(cell.value);
-                    if (!text) return;
-                    const fontSize = (dataFontSize > 0 && cell.col !== 1)
-                        ? dataFontSize
-                        : ((cell.font && cell.font.size) || 11);
-                    const colWidth = worksheet.getColumn(cell.col).width || 8.43;
-                    const height = estimateRowHeight(text, colWidth, fontSize);
-                    if (height > maxHeight) maxHeight = height;
-                });
-                row.height = maxHeight;
-            });
-
-            // Общие формулы ExcelJS не переживают вставку строки и столбца: запись файла падает.
-            // Сначала раскрываем их в обычные и сдвигаем ссылки на новую строку и столбец подписей.
-            prepareFormulasForInsert(worksheet);
-
-            // В ExcelJS 4.3 нет insertColumn. Пустой массив — один новый столбец, старые сдвигаются вправо.
-            worksheet.spliceColumns(1, 0, []);
-            worksheet.insertRow(1, []);
-
-            worksheet.getColumn(1).width = LABEL_COL_WIDTH;
-            worksheet.getRow(1).height = HEADER_ROW_HEIGHT;
-
-            const paper = paperSizes[paperSize];
-            const marginMm = PAGE_MARGIN_IN * 2 * 25.4;
-            const pageSafetyMm = 2;
-            let pageWidthMm;
-            let pageHeightMm;
-            if (orientation === 'landscape') {
-                pageWidthMm = paper.width - marginMm - pageSafetyMm;
-                pageHeightMm = paper.height - marginMm - pageSafetyMm;
-            } else {
-                pageWidthMm = paper.height - marginMm - pageSafetyMm;
-                pageHeightMm = paper.width - marginMm - pageSafetyMm;
-            }
-
-            const firstDataCol = 2;
-            const lastDataCol = lastCol + 1;
-            const firstDataRow = 2;
-            const lastDataRow = lastRow + 1;
-            const markerMm = columnWidthToMm(LABEL_COL_WIDTH);
-            const headerMm = rowHeightToMm(HEADER_ROW_HEIGHT);
-
-            const sections = packBySize(firstDataCol, lastDataCol, col => {
-                return columnWidthToMm(worksheet.getColumn(col).width);
-            }, pageWidthMm, markerMm);
-            const pages = packBySize(firstDataRow, lastDataRow, row => {
-                return rowHeightToMm(worksheet.getRow(row).height);
-            }, pageHeightMm, headerMm);
-
-            const sectionFont = { size: 24, bold: true, color: { argb: 'FFFF0000' } };
-            const sectionFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } };
-            const sectionAlign = { horizontal: 'center', vertical: 'middle', wrapText: true };
-            sections.forEach((range, index) => {
-                writeLabel(
-                    worksheet, 1, range[0], 1, range[1],
-                    'СЕКЦИЯ ' + (index + 1) + ' ➔',
-                    sectionFont, sectionFill, sectionAlign
-                );
-            });
-
-            const rowFont = { size: 18, bold: true, color: { argb: 'FF0000FF' } };
-            const rowFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF00FFFF' } };
-            const rowAlign = { horizontal: 'center', vertical: 'middle', wrapText: true };
-            pages.forEach((range, index) => {
-                writeLabel(
-                    worksheet, range[0], 1, range[1], 1,
-                    'СТРОКА ' + (index + 1),
-                    rowFont, rowFill, rowAlign
-                );
-            });
-
-            const corner = worksheet.getCell(1, 1);
-            corner.value = 'СГИБ';
-            corner.font = { size: 12, bold: true, color: { argb: 'FF2D3748' } };
-            corner.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-            corner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7FAFC' } };
-
-            for (let p = 0; p < pages.length - 1; p++) {
-                worksheet.getRow(pages[p][1]).addPageBreak();
-            }
-
-            worksheet.pageSetup = {
-                orientation: orientation,
-                paperSize: paper.paperCode,
-                scale: 100,
-                fitToPage: false,
-                pageOrder: 'overThenDown',
-                printTitlesRow: '1:1',
-                printTitlesColumn: 'A:A',
-                horizontalCentered: false,
-                verticalCentered: false,
-                margins: {
-                    left: PAGE_MARGIN_IN,
-                    right: PAGE_MARGIN_IN,
-                    top: PAGE_MARGIN_IN,
-                    bottom: PAGE_MARGIN_IN,
-                    header: 0.3,
-                    footer: 0.3
-                }
-            };
-
-            worksheet.views = [{
-                workbookViewId: 0,
-                state: 'normal',
-                style: 'pageBreakPreview',
-                showGridLines: true,
-                zoomScale: 100,
-                zoomScaleNormal: 100
-            }];
-
-            const colBreaks = [];
-            for (let s = 0; s < sections.length - 1; s++) colBreaks.push(sections[s][1]);
-            worksheet._harmonicaColBreaks = colBreaks;
-
-            return { sections: sections.length, pages: pages.length };
-        }
-
-        async function downloadResult() {
-            if (!processedWorkbook) {
-                showToast('error', 'Нет результата', 'Сначала обработайте файл');
-                return;
-            }
-            try {
-                const raw = await processedWorkbook.xlsx.writeBuffer();
-                const buffer = await injectColumnBreaks(raw, processedWorkbook);
-                const blob = new Blob([buffer], {
-                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                });
-                saveAs(blob, originalFileName + '_harmonica.xlsx');
-                showToast('success', 'Скачивание начато', 'Файл сохранён');
-            } catch (error) {
-                console.error(error);
-                showToast('error', 'Ошибка сохранения', error.message);
-            }
-        }
-    </script>
+<main>
+<h1>Таблица → книга-гармошка</h1>
+<p class="lead">Загрузите Excel-файл — получите документ, готовый к печати: одинаковые столбцы, высота строк по тексту, сквозная строка с номерами столбцов и красные линии сгиба.</p>
+<svg class="fold" viewBox="0 0 700 34" preserveAspectRatio="none" aria-hidden="true"><path d="M0 28 L100 6 L200 28 L300 6 L400 28 L500 6 L600 28 L700 6" fill="none" stroke="#d63a2b" stroke-width="2.5" stroke-linejoin="round"/></svg>
+
+<div class="card">
+<label class="drop" id="drop"><input type="file" id="file" accept=".xlsx"><b id="fname">Выберите файл .xlsx</b><span>или перетащите его сюда · файл не покидает ваш компьютер</span></label>
+</div>
+
+<div class="card">
+<h2>Параметры</h2>
+<div class="grid">
+<label class="f">Ширина столбцов, символов<input id="w" type="number" min="6" max="60" value="18"><small id="wh"></small></label>
+<label class="f">Левое поле (переплёт), мм<input id="bind" type="number" min="3" max="40" value="15"><small>на всех листах гармошки</small></label>
+<label class="f">Остальные поля, мм<input id="mar" type="number" min="3" max="25" value="5"><small>снизу ещё место под название гармошки</small></label>
+<label class="f">Размер шрифта, пт<input id="fs" type="number" min="0" max="24" value="0"><small>0 — как в исходном файле; для печати обычно 8–10</small></label>
+<label class="f">Бумага<select id="paper"><option value="A4">A4</option><option value="A3">A3</option><option value="Letter">Letter</option></select></label>
+<label class="f">Ориентация<select id="orient"><option value="landscape">Альбомная</option><option value="portrait">Книжная</option></select></label>
+</div>
+</div>
+
+<div class="err" id="err"></div>
+<button id="go" disabled>Подготовить к печати</button>
+
+<div class="card res" id="res" style="margin-top:16px">
+<h2>Готово</h2>
+<div class="stats" id="stats"></div>
+<p id="note" style="display:none;background:#fff4dd;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:14px"></p>
+<button class="pr" id="pr" type="button">Распечатать всю книгу</button>
+<p class="hint">В окне печати: масштаб 100%, поля «По умолчанию», включите «Фоновая графика» (иначе не напечатается серая строка с номерами). Печатайте без двусторонней печати.</p>
+<a class="dl" id="dl" href="#">Или скачать файл Excel</a>
+<h2>Как собрать</h2>
+<ol id="how"></ol>
+</div>
+</main>
+<div id="book"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const PAPER={A4:[9,210,297],A3:[8,297,420],Letter:[1,215.9,279.4]};
+const MARG=0.4, MM=25.4, RED='FFD63A2B';
+const px=w=>Math.trunc(w*7+5), mm=p=>p*MM/96;
+const letters=n=>{let s='';for(;n>0;n=Math.floor((n-1)/26))s=String.fromCharCode(65+(n-1)%26)+s;return s};
+
+function val(v){return v&&typeof v==='object'&&!(v instanceof Date)&&('result' in v||'formula' in v||'sharedFormula' in v)?(v.result??null):v}
+function txt(v){
+  if(v==null)return '';
+  if(v instanceof Date)return '00.00.0000';
+  if(typeof v==='object')return v.richText?v.richText.map(r=>r.text).join(''):v.text!=null?String(v.text):'';
+  return String(v);
+}
+// Оценка числа строк текста при переносе по словам (с запасом ~6%)
+function lines(t,wch,fs){
+  const W=px(wch)-8,k=fs/11*1.05,sp=3.6*k;
+  const cw=c=>/[ilI.,:;!()\/|'"«»\-]/.test(c)?3.6:/[шщжюыфмШЩЖЮЫФМ]/.test(c)?9.2:/[A-ZА-ЯЁ]/.test(c)?8:/\d/.test(c)?7:6.3;
+  let n=0;
+  for(const p of t.split(/\r?\n/)){
+    let cur=0,l=1;
+    for(const w of p.split(' ')){
+      const ww=[...w].reduce((a,c)=>a+cw(c)*k,0);
+      if(cur&&cur+sp+ww>W){l++;cur=0}
+      if(ww>W){l+=Math.floor(ww/W);cur=ww%W}else cur+=(cur?sp:0)+ww;
+    }
+    n+=l;
+  }
+  return n;
+}
+
+async function build(buf,o){
+  const src=new ExcelJS.Workbook();await src.xlsx.load(buf);
+  const ws=src.worksheets[0];if(!ws)throw new Error('В файле нет листов');
+  const R=ws.rowCount,C=ws.columnCount;
+  // Столбцов-подписей: задано вручную или самый широкий из первых трёх (в нём обычно названия строк)
+  let L=o.lab;
+  if(!L){L=1;let bw=0;for(let c=1;c<=Math.min(3,C-1);c++){const w=ws.getColumn(c).width||8.43;if(w>bw+0.5){bw=w;L=c}}}
+  // Строка наименований: первая из верхних, где в подписях встречается «Наименование» (иначе — первая); под ней вставляется строка номеров
+  let H=1;for(let r=1;r<=Math.min(8,R);r++){let t='';for(let c=1;c<=L;c++)t+=' '+txt(val(ws.getCell(r,c).value));if(/(^|\s)наименован/i.test(t)){H=r;break}}
+  if(C<=L)throw new Error('В таблице всего '+C+' столб., а слева зарезервировано '+L);
+  // Объединённые ячейки не переносим (на сгибах они рвутся): текст в первой ячейке, заливка — по всей ширине
+  const master={};
+  for(const m of ws.model.merges||[]){
+    const [a,b]=m.split(':').map(x=>ws.getCell(x));
+    for(let r=a.row;r<=b.row;r++)for(let c=a.col;c<=b.col;c++)if(r!==a.row||c!==a.col)master[r+','+c]=[a.row,a.col];
+  }
+
+  const fsOf=sc=>o.fs||(sc.font&&sc.font.size)||11;
+  const wid=c=>c<=L?(ws.getColumn(c).width||8.43):o.w;
+  let widened=null;
+
+  // Параметры страницы. Подписи (левые столбцы) только на первом листе гармошки
+  const [pcode,w0,h0]=PAPER[o.paper];
+  const pw=o.orient==='landscape'?h0:w0, ph=o.orient==='landscape'?w0:h0, mg=o.mar,ml=o.bind,mb=Math.max(mg,9);
+  let labPx=0;for(let c=1;c<=L;c++)labPx+=px(wid(c));
+  const cwm=mm(px(o.w))*1.02;
+  const K1=Math.max(1,Math.floor((pw-ml-mg-mm(labPx)-4)/cwm));
+  const K2=Math.max(1,Math.floor((pw-ml-mg-4)/cwm));
+  const ends=[];let e=Math.min(C,L+K1);ends.push(e);
+  while(e<C){e=Math.min(C,e+K2);ends.push(e)}
+  const cb=ends.slice(0,-1);
+  const secFor=w=>{const cw=mm(px(w))*1.02,a=Math.max(1,Math.floor((pw-ml-mg-mm(labPx)-4)/cw)),b=Math.max(1,Math.floor((pw-ml-mg-4)/cw));return 1+Math.max(0,Math.ceil((C-L-a)/b))};
+  let tip=null;for(let w=o.w-1;w>=Math.max(6,o.w-6)&&!tip;w--)if(secFor(w)<ends.length)tip={w,sections:secFor(w)};
+
+  // Высоты строк по содержимому
+  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const disp=v=>v instanceof Date?v.toLocaleDateString('ru-RU',{timeZone:'UTC'}):txt(v);
+  const fillOf=sc=>{const a=sc.fill&&sc.fill.pattern==='solid'&&sc.fill.fgColor&&sc.fill.fgColor.argb;return a&&/^[0-9A-F]{8}$/i.test(a)?'#'+a.slice(2):''};
+  const cellHtml=(r,c,extra)=>{
+    const m=master[r+','+c],sc=m?ws.getCell(m[0],m[1]):ws.getCell(r,c),f=fillOf(sc);
+    return `<td style="font-size:${fsOf(sc)}pt;${sc.font&&sc.font.bold?'font-weight:700;':''}${f?'background:'+f+';':''}${extra||''}">${m?'':esc(disp(val(sc.value)))}</td>`;
+  };
+  const hs=[],ih=[];
+  for(let r=1;r<=R;r++){
+    let lns=1,fsMax=11,hdr=false;
+    for(let c=1;c<=C;c++){
+      const m=master[r+','+c];if(m)hdr=true;
+      const sc=m?ws.getCell(m[0],m[1]):ws.getCell(r,c),fs=fsOf(sc);fsMax=Math.max(fsMax,fs);
+      if(!m){const t=txt(val(sc.value));if(t)lns=Math.max(lns,lines(t,wid(c),fs))}
+    }
+    ih[r]=hdr;hs[r]=Math.min(409,Math.max(15,Math.ceil(lns*fsMax*1.3+4)));
+  }
+
+  // Точная высота строк: измеряем в браузере (как при печати), самая высокая ячейка строки определяет высоту
+  if(typeof document!=='undefined'){
+    const box=document.createElement('div');box.className='sh';box.style.cssText='position:absolute;left:-99999px;top:0;visibility:hidden';
+    let t='',tw=0;const cg=[];
+    for(let c=1;c<=C;c++){const w=mm(px(wid(c)));tw+=w;cg.push(`<col style="width:${w.toFixed(2)}mm">`)}
+    t=`<table style="width:${tw.toFixed(2)}mm"><colgroup>${cg.join('')}</colgroup>`;
+    for(let r=1;r<=R;r++){t+='<tr>';for(let c=1;c<=C;c++)t+=cellHtml(r,c);t+='</tr>'}
+    box.innerHTML=t+'</table>';document.body.appendChild(box);
+    [...box.querySelectorAll('tr')].forEach((tr,i)=>{hs[i+1]=Math.ceil(tr.getBoundingClientRect().height*0.75)+1});
+    box.remove();
+  }
+
+  // Предупреждение: строка выше 409 пт (предел Excel и почти целая страница) — текст в печати не поместится
+  {const cand=[];
+   for(let r=1;r<=R;r++)if(hs[r]>409){let best=null;for(let c=L+1;c<=C;c++){const sc=ws.getCell(r,c),t=master[r+','+c]?'':txt(val(sc.value));if(!best||t.length>best[0].length)best=[t,fsOf(sc),sc.address]}if(best&&best[0])cand.push(best)}
+   if(cand.length){let need=o.w;while(need<60&&!cand.every(([t,fs])=>lines(t,need,fs)*fs*1.3+4<=409))need++;widened={need,cells:cand.map(x=>x[2]).slice(0,4)}}}
+
+  // Разбиение на гармошки: каждая — полоса строк, которая целиком влезает на один лист по высоте
+  const hmm=p=>p*0.3528,tH=hmm(22),availH=(ph-mg-mb)*0.94-4;
+  const bands=[];let cur=[],acc=H===0?tH:0;
+  for(let r=1;r<=R;r++){
+    const hh=hmm(hs[r]);
+    if(cur.length&&acc+hh>availH){
+      let mv=[];if(ih[r-1]&&cur.length>1)mv=[cur.pop()];   // заголовок раздела не оставляем внизу
+      bands.push(cur);cur=mv;acc=tH+mv.reduce((a,x)=>a+hmm(hs[x]),0);
+    }
+    cur.push(r);acc+=hh;if(r===H)acc+=tH;
+  }
+  bands.push(cur);
+
+  // Версия для печати прямо из браузера: те же листы в HTML
+  const blocks=ends.map((e,k)=>[k?ends[k-1]+1:1,e]);
+  let book='';
+  bands.forEach((rows,bi)=>{
+    const after=H>0&&rows.includes(H)?H:0;
+    blocks.forEach(([s0,e0],k)=>{
+      const cols=[];for(let c=s0;c<=e0;c++)cols.push(c);
+      const fold=k<blocks.length-1,tw=cols.reduce((a,c)=>a+mm(px(wid(c))),0);
+      const td=(c,inner,st)=>`<td style="${st}${fold&&c===e0?';border-right:.8mm solid #d63a2b':''}">${inner}</td>`;
+      const num=()=>'<tr class="n" style="height:22pt">'+cols.map(c=>td(c,c>L?c-L:c===L?'№ столбца':'','')).join('')+'</tr>';
+      let t=`<table style="width:${tw.toFixed(2)}mm"><colgroup>`+cols.map(c=>`<col style="width:${mm(px(wid(c))).toFixed(2)}mm">`).join('')+'</colgroup>';
+      if(after===0)t+=num();
+      rows.forEach(r=>{
+        t+=`<tr style="height:${hs[r]}pt">`+cols.map(c=>cellHtml(r,c,fold&&c===e0?'border-right:.8mm solid #d63a2b':'')).join('')+'</tr>';
+        if(r===after)t+=num();
+      });
+      book+=`<section class="sh" style="height:${(ph-mg-mb-1).toFixed(1)}mm">${t}</table><div class="ft">Гармошка ${bi+1} из ${bands.length} · лист ${k+1} из ${blocks.length}</div></section>`;
+    });
+  });
+
+  const out=new ExcelJS.Workbook();
+  const numRow=(s,n)=>{
+    const row=s.getRow(n);row.height=22;
+    for(let c=1;c<=C;c++){
+      const cell=row.getCell(c);
+      if(c>L)cell.value=c-L;else if(c===L)cell.value='№ столбца';
+      cell.font={name:'Arial',bold:true,size:c>L?12:9};
+      cell.alignment={horizontal:'center',vertical:'middle'};
+      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE8E4DA'}};
+      cell.border={top:{style:'thin'},bottom:{style:'medium'},left:{style:'thin'},right:{style:'thin'}};
+    }
+  };
+  const copyRow=(s,r,n)=>{
+    const row=s.getRow(n);   // высота не задаётся: Excel подбирает её сам по тексту
+    for(let c=1;c<=C;c++){
+      const m=master[r+','+c],sc=m?ws.getCell(m[0],m[1]):ws.getCell(r,c),nc=row.getCell(c);
+      if(!m)nc.value=val(sc.value);
+      nc.style=JSON.parse(JSON.stringify(sc.style||{}));
+      nc.font={...(nc.font||{}),size:fsOf(sc)};
+      nc.alignment={...(nc.alignment||{}),horizontal:'left',wrapText:true,vertical:(nc.alignment&&nc.alignment.vertical)||'middle'};
+    }
+  };
+
+  bands.forEach((rows,bi)=>{
+    const s=out.addWorksheet('Гармошка '+(bi+1));
+    for(let c=1;c<=C;c++)s.getColumn(c).width=wid(c);
+    const after=H>0&&rows.includes(H)?H:0;   // строка номеров идёт под строкой наименований, иначе — вверху
+    let n=1;if(after===0)numRow(s,n++);
+    rows.forEach(r=>{copyRow(s,r,n++);if(r===after)numRow(s,n++)});
+    cb.forEach(e=>{for(let r=1;r<n;r++){const cell=s.getRow(r).getCell(e);cell.border={...(cell.border||{}),right:{style:'medium',color:{argb:RED}}}}});
+    s.pageSetup={paperSize:pcode,orientation:o.orient,scale:100,fitToPage:false,
+      printOrder:'overThenDown',
+      margins:{left:ml/MM,right:mg/MM,top:mg/MM,bottom:mb/MM,header:0,footer:.08}};
+    s.headerFooter.oddFooter='&C&8&A';
+  });
+
+  // ExcelJS не умеет вертикальные разрывы страниц — дописываем их в XML каждого листа
+  const zip=await JSZip.loadAsync(await out.xlsx.writeBuffer());
+  if(cb.length){
+    const tag='<colBreaks count="'+cb.length+'" manualBreakCount="'+cb.length+'">'+cb.map(e=>'<brk id="'+(e)+'" max="1048575" man="1"/>').join('')+'</colBreaks>';
+    for(let i=1;i<=bands.length;i++){
+      const f='xl/worksheets/sheet'+i+'.xml';let xml=await zip.file(f).async('string');
+      const m=[/<\/headerFooter>/,/<pageSetup[^>]*\/>/,/<pageMargins[^>]*\/>/].map(r=>xml.match(r)).find(Boolean);
+      if(!m)throw new Error('не удалось добавить разрывы страниц');
+      zip.file(f,xml.replace(m[0],m[0]+tag));
+    }
+  }
+  const data=await zip.generateAsync({type:'uint8array',compression:'DEFLATE'});
+  return {tip,html:book,pg:`@page{size:${o.paper} ${o.orient};margin:${mg}mm ${mg}mm ${mb}mm ${ml}mm}`,data,widened,L,K1,K2,sections:ends.length,bands:bands.length,pages:ends.length*bands.length};
+}
+
+let buf=null,name='',last=null;
+$('pr').onclick=()=>{if(!last)return;$('book').innerHTML=last.html;$('pg').textContent=last.pg;setTimeout(()=>window.print(),50)};
+function setFile(f){
+  if(!f)return;
+  if(!/\.xlsx$/i.test(f.name)){showErr('Нужен файл формата .xlsx');return}
+  name=f.name.replace(/\.xlsx$/i,'');$('fname').textContent=f.name;$('drop').classList.add('ok');
+  f.arrayBuffer().then(b=>{buf=b;$('go').disabled=false;showErr('')});
+}
+function showErr(m){const e=$('err');e.textContent=m;e.classList.toggle('on',!!m)}
+const wh=()=>{const w=+$('w').value||18;$('wh').textContent=`≈ ${(px(w)*25.4/96).toFixed(0)} мм: столько цифр помещается в строку столбца. Ширина одинакова у всех столбцов, кроме подписей слева`};
+$('w').oninput=wh;wh();
+$('file').onchange=e=>setFile(e.target.files[0]);
+const dz=$('drop');
+['dragenter','dragover'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.add('on')}));
+['dragleave','drop'].forEach(t=>dz.addEventListener(t,e=>{e.preventDefault();dz.classList.remove('on')}));
+dz.addEventListener('drop',e=>setFile(e.dataTransfer.files[0]));
+
+$('go').onclick=async()=>{
+  const b=$('go');b.disabled=true;b.textContent='Обработка…';showErr('');$('res').classList.remove('on');
+  try{
+    const o={w:+$('w').value||18,bind:Math.min(40,Math.max(3,+$('bind').value||15)),mar:Math.min(25,Math.max(3,+$('mar').value||5)),fs:+$('fs').value||0,paper:$('paper').value,orient:$('orient').value};
+    const r=await build(buf,o);
+    last=r;
+    const url=URL.createObjectURL(new Blob([r.data],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+    const a=$('dl');a.href=url;a.download=name+'_harmonica.xlsx';
+    $('stats').innerHTML=[[r.bands,'гармошек'],[r.sections,'листов в гармошке'],[r.pages,'листов всего'],[r.K1+' / '+r.K2,'столбцов данных: 1-й лист / остальные']].map(x=>`<div class="stat"><b>${x[0]}</b><span>${x[1]}</span></div>`).join('');
+    $('how').innerHTML=`<li>Откройте файл в Excel: Файл → Печать → «Напечатать всю книгу», масштаб 100%. Каждый лист Excel — одна гармошка, поэтому сначала выйдет вся первая гармошка, потом вторая и так далее. Название («Гармошка N») напечатано внизу каждого листа.</li>
+<li>В каждой гармошке ${r.sections} лист(а): склейте их скотчем слева направо в порядке номеров столбцов вверху. Подписи строк есть только на первом листе.</li>
+<li>Сложите склеенную полосу гармошкой по красным линиям.</li>
+<li>Сложите все ${r.bands} гармошек в стопку по номерам.</li>`;
+    $('note').innerHTML=(r.widened?`<b>Внимание:</b> текст в ячейках ${r.widened.cells.join(', ')} слишком длинный: строка получается выше страницы и в печати он не поместится. Нужна ширина около ${r.widened.need} или сократите текст.<br>`:'')+(r.tip?`<b>Совет:</b> при ширине ${r.tip.w} в гармошке будет ${r.tip.sections} лист(а) вместо ${r.sections}.`:'');
+    $('note').style.display=$('note').innerHTML?'block':'none';
+    $('res').classList.add('on');
+  }catch(e){console.error(e);showErr('Не получилось обработать файл: '+e.message)}
+  b.disabled=false;b.textContent='Подготовить к печати';
+};
+</script>
 </body>
 </html>
