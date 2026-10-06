@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>📚 Excel Harmonica Book Maker</title>
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
     <style>
         :root {
@@ -285,9 +286,9 @@
                 <ul>
                     <li>Все столбцы (кроме первого) станут одинаковой ширины</li>
                     <li>Размер шрифта данных будет изменён на выбранный</li>
-                    <li>Программа автоматически рассчитает разрывы страниц</li>
-                    <li>Добавится маркировка «СЕКЦИЯ 1, 2, 3...» сверху и «СТРОКА 1, 2, 3...» слева</li>
-                    <li>На местах сгибов появятся жирные красные линии</li>
+                    <li>Границы страниц считаются по ширине столбцов, высоте строк и полям листа</li>
+                    <li>Добавится маркировка «СЕКЦИЯ 1, 2, 3...» сверху и «СТРОКА 1, 2, 3...» слева — ровно по этим границам</li>
+                    <li>На местах сгибов появятся жирные красные линии, и те же границы запишутся как разрывы страниц Excel</li>
                     <li>Маркировка будет автоматически повторяться на каждой странице при печати</li>
                     <li>Вся обработка происходит локально — ваши данные в безопасности</li>
                 </ul>
@@ -296,7 +297,7 @@
 
         <div class="footer">
             <p>Сделано с ❤️ для удобной печати больших таблиц</p>
-            <p>Версия 1.2</p>
+            <p>Версия 1.3</p>
         </div>
     </div>
 
@@ -312,6 +313,9 @@
             'A3': { width: 420, height: 297, paperCode: 8 },
             'Letter': { width: 279, height: 216, paperCode: 1 }
         };
+        const PAGE_MARGIN_IN = 0.5;
+        const LABEL_COL_WIDTH = 18;
+        const HEADER_ROW_HEIGHT = 34;
 
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
@@ -330,7 +334,7 @@
         });
 
         function handleFile(file) {
-            if (!file.name.endsWith('.xlsx')) {
+            if (!/\.xlsx$/i.test(file.name)) {
                 showToast('error', 'Неверный формат', 'Пожалуйста, выберите файл .xlsx');
                 return;
             }
@@ -388,7 +392,7 @@
 
             try {
                 const arrayBuffer = await selectedFile.arrayBuffer();
-                originalFileName = selectedFile.name.replace('.xlsx', '');
+                originalFileName = selectedFile.name.replace(/\.xlsx$/i, '');
                 updateProgress(20, 'Загрузка данных...');
 
                 const workbook = new ExcelJS.Workbook();
@@ -428,6 +432,159 @@
             }
         }
 
+        function cellPlainText(value) {
+            if (value == null) return '';
+            if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+                return String(value);
+            }
+            if (value instanceof Date) return value.toLocaleString('ru-RU');
+            if (Array.isArray(value.richText)) {
+                return value.richText.map(part => part.text || '').join('');
+            }
+            if (value.hyperlink != null && value.text != null) return String(value.text);
+            if (Object.prototype.hasOwnProperty.call(value, 'result')) return cellPlainText(value.result);
+            return '';
+        }
+
+        function columnWidthToMm(width) {
+            const safe = (typeof width === 'number' && width > 0) ? width : 8.43;
+            const px = safe < 1 ? Math.floor(safe * 12) : Math.floor(safe * 7 + 5);
+            return px * 25.4 / 96;
+        }
+
+        function rowHeightToMm(height) {
+            const safe = (typeof height === 'number' && height > 0) ? height : 15;
+            return safe * 25.4 / 72;
+        }
+
+        function estimateRowHeight(text, colWidth, fontSize) {
+            const size = fontSize > 0 ? fontSize : 11;
+            const width = Math.max(colWidth || 8.43, 1);
+            const charsPerLine = Math.max(1, Math.floor(width * (11 / size)));
+            const parts = String(text).split(/\r\n|\n|\r/);
+            let lines = 0;
+            for (let i = 0; i < parts.length; i++) {
+                lines += Math.max(1, Math.ceil(parts[i].length / charsPerLine));
+            }
+            return Math.max(15, Math.ceil(lines * size * 1.25));
+        }
+
+        function packBySize(start, end, sizeOf, limit, overhead) {
+            const ranges = [];
+            let index = start;
+            while (index <= end) {
+                const rangeStart = index;
+                let used = overhead;
+                while (index <= end) {
+                    const size = sizeOf(index);
+                    if (index > rangeStart && used + size > limit) break;
+                    used += size;
+                    index += 1;
+                }
+                ranges.push([rangeStart, index - 1]);
+            }
+            return ranges;
+        }
+
+        function writeLabel(worksheet, row, col, endRow, endCol, value, font, fill, alignment) {
+            if (endRow > row || endCol > col) {
+                worksheet.mergeCells(row, col, endRow, endCol);
+            }
+            const cell = worksheet.getCell(row, col);
+            cell.value = value;
+            cell.font = font;
+            cell.fill = fill;
+            cell.alignment = alignment;
+        }
+
+        function setEdge(cell, edge) {
+            const border = Object.assign({}, cell.border || {});
+            border[edge] = { style: 'thick', color: { argb: 'FFFF0000' } };
+            cell.border = border;
+        }
+
+        function insertColBreaksXml(xml, block) {
+            if (xml.includes('<colBreaks')) {
+                return xml.replace(/<colBreaks\b[\s\S]*?<\/colBreaks>/, block);
+            }
+            const anchors = ['</rowBreaks>', '<drawing ', '<legacyDrawing', '<picture ', '<tableParts', '<extLst', '</worksheet>'];
+            for (let i = 0; i < anchors.length; i++) {
+                const anchor = anchors[i];
+                const at = xml.indexOf(anchor);
+                if (at === -1) continue;
+                if (anchor.charAt(0) === '<') {
+                    if (anchor.charAt(1) === '/') {
+                        const end = at + anchor.length;
+                        return xml.slice(0, end) + block + xml.slice(end);
+                    }
+                    return xml.slice(0, at) + block + xml.slice(at);
+                }
+            }
+            return xml;
+        }
+
+        function decodeXml(text) {
+            return text
+                .replace(/&amp;/g, '&')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/&quot;/g, '"')
+                .replace(/&apos;/g, "'");
+        }
+
+        function sheetXmlPath(target) {
+            let path = String(target).replace(/\\/g, '/');
+            if (path.charAt(0) === '/') path = path.slice(1);
+            if (path.indexOf('xl/') !== 0) path = 'xl/' + path;
+            return path;
+        }
+
+        async function injectColumnBreaks(buffer, workbook) {
+            const jobs = workbook.worksheets.filter(ws => ws._harmonicaColBreaks && ws._harmonicaColBreaks.length);
+            if (!jobs.length) return buffer;
+            if (typeof JSZip === 'undefined') {
+                throw new Error('Библиотека JSZip не загрузилась. Проверьте интернет и откройте страницу ещё раз.');
+            }
+
+            const zip = await JSZip.loadAsync(buffer);
+            const workbookXml = await zip.file('xl/workbook.xml').async('string');
+            const relsXml = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+            const sheetTags = workbookXml.match(/<sheet\b[^>]*\/?>/g) || [];
+            const sheets = sheetTags.map(tag => {
+                const name = tag.match(/\bname="([^"]*)"/);
+                const rid = tag.match(/\br:id="([^"]+)"/);
+                return {
+                    name: name ? decodeXml(name[1]) : '',
+                    rid: rid ? rid[1] : ''
+                };
+            });
+            const rels = {};
+            const relTags = relsXml.match(/<Relationship\b[^>]*\/?>/g) || [];
+            relTags.forEach(tag => {
+                const id = tag.match(/\bId="([^"]+)"/);
+                const target = tag.match(/\bTarget="([^"]+)"/);
+                if (id && target) rels[id[1]] = target[1];
+            });
+
+            for (let i = 0; i < jobs.length; i++) {
+                const worksheet = jobs[i];
+                const sheet = sheets.find(item => item.name === worksheet.name);
+                if (!sheet || !rels[sheet.rid]) {
+                    throw new Error('Не найден лист «' + worksheet.name + '» в файле Excel');
+                }
+                const path = sheetXmlPath(rels[sheet.rid]);
+                const file = zip.file(path);
+                if (!file) throw new Error('Не найден файл листа ' + path);
+                const breaks = worksheet._harmonicaColBreaks;
+                const brks = breaks.map(id => '<brk id="' + id + '" max="1048575" man="1"/>').join('');
+                const block = '<colBreaks count="' + breaks.length + '" manualBreakCount="' + breaks.length + '">' + brks + '</colBreaks>';
+                const xml = insertColBreaksXml(await file.async('string'), block);
+                zip.file(path, xml);
+            }
+
+            return zip.generateAsync({ type: 'arraybuffer' });
+        }
+
         async function processSheet(worksheet, columnWidth, dataFontSize, paperSize, orientation) {
             const lastCol = worksheet.columnCount;
             const lastRow = worksheet.rowCount;
@@ -437,136 +594,162 @@
                 worksheet.getColumn(i).width = columnWidth;
             }
 
-            if (dataFontSize > 0) {
-                worksheet.eachRow((row, rowNumber) => {
-                    row.eachCell({ includeEmpty: true }, (cell) => {
-                        if (cell.col === 1) return;
-                        const currentFont = cell.font || {};
-                        cell.font = { ...currentFont, size: dataFontSize };
-                    });
-                });
-            }
-
-            worksheet.eachRow((row) => {
-                row.eachCell({ includeEmpty: true }, (cell) => {
-                    const currentAlignment = cell.alignment || {};
-                    cell.alignment = { ...currentAlignment, wrapText: true, vertical: 'top' };
+            worksheet.eachRow(row => {
+                row.eachCell(cell => {
+                    if (dataFontSize > 0 && cell.col !== 1) {
+                        if (cell.value && Array.isArray(cell.value.richText)) {
+                            cell.value = {
+                                richText: cell.value.richText.map(part => {
+                                    const font = Object.assign({}, part.font || {}, { size: dataFontSize });
+                                    return Object.assign({}, part, { font: font });
+                                })
+                            };
+                        } else {
+                            const font = Object.assign({}, cell.font || {});
+                            font.size = dataFontSize;
+                            cell.font = font;
+                        }
+                    }
+                    const alignment = Object.assign({}, cell.alignment || {});
+                    alignment.wrapText = true;
+                    if (!alignment.vertical) alignment.vertical = 'top';
+                    cell.alignment = alignment;
                 });
             });
 
-            worksheet.eachRow((row, rowNumber) => {
+            worksheet.eachRow(row => {
                 let maxHeight = 15;
-                row.eachCell({ includeEmpty: false }, (cell) => {
-                    const text = cell.value ? cell.value.toString() : '';
-                    const colWidth = worksheet.getColumn(cell.col).width || 10;
-                    const charsPerLine = colWidth * 1.2;
-                    const lines = Math.ceil(text.length / charsPerLine);
-                    const height = Math.max(15, lines * 15);
+                row.eachCell(cell => {
+                    const text = cellPlainText(cell.value);
+                    if (!text) return;
+                    const fontSize = (dataFontSize > 0 && cell.col !== 1)
+                        ? dataFontSize
+                        : ((cell.font && cell.font.size) || 11);
+                    const colWidth = worksheet.getColumn(cell.col).width || 8.43;
+                    const height = estimateRowHeight(text, colWidth, fontSize);
                     if (height > maxHeight) maxHeight = height;
                 });
                 row.height = maxHeight;
             });
 
-            const paper = paperSizes[paperSize];
-            let pageWidthMm, pageHeightMm;
-            if (orientation === 'landscape') {
-                pageWidthMm = paper.width - 25.4;
-                pageHeightMm = paper.height - 25.4;
-            } else {
-                pageWidthMm = paper.height - 25.4;
-                pageHeightMm = paper.width - 25.4;
-            }
-
-            const firstColWidth = worksheet.getColumn(1).width || 10;
-            const firstColWidthMm = firstColWidth * 2.08;
-            const colWidthMm = columnWidth * 2.08;
-
-            let currentWidth = firstColWidthMm;
-            const colBreaks = [];
-            for (let i = 2; i <= lastCol; i++) {
-                if (currentWidth + colWidthMm > pageWidthMm) {
-                    colBreaks.push(i - 1);
-                    currentWidth = colWidthMm;
-                } else {
-                    currentWidth += colWidthMm;
-                }
-            }
-
-            let currentHeight = 0;
-            const rowBreaks = [];
-            for (let i = 1; i <= lastRow; i++) {
-                const rowHeight = worksheet.getRow(i).height || 15;
-                const rowHeightMm = rowHeight * 0.3528;
-                if (currentHeight + rowHeightMm > pageHeightMm && currentHeight > 0) {
-                    rowBreaks.push(i - 1);
-                    currentHeight = rowHeightMm;
-                } else {
-                    currentHeight += rowHeightMm;
-                }
-            }
-
+            // В ExcelJS 4.3 нет insertColumn. Пустой массив — один новый столбец, старые сдвигаются вправо.
+            worksheet.spliceColumns(1, 0, []);
             worksheet.insertRow(1, []);
-            worksheet.insertColumn(1, []);
 
-            const numSections = colBreaks.length + 1;
-            const dataCols = lastCol - 1;
-            const colsPerSection = Math.ceil(dataCols / numSections);
-            for (let s = 1; s <= numSections; s++) {
-                const startCol = 2 + (s - 1) * colsPerSection;
-                const endCol = Math.min(startCol + colsPerSection - 1, lastCol + 1);
-                if (startCol <= lastCol + 1) {
-                    worksheet.mergeCells(1, startCol, 1, endCol);
-                    const cell = worksheet.getCell(1, startCol);
-                    cell.value = 'СЕКЦИЯ ' + s + ' ➔';
-                    cell.font = { size: 24, bold: true, color: { argb: 'FFFF0000' } };
-                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } };
-                }
+            worksheet.getColumn(1).width = LABEL_COL_WIDTH;
+            worksheet.getRow(1).height = HEADER_ROW_HEIGHT;
+
+            const paper = paperSizes[paperSize];
+            const marginMm = PAGE_MARGIN_IN * 2 * 25.4;
+            const pageSafetyMm = 2;
+            let pageWidthMm;
+            let pageHeightMm;
+            if (orientation === 'landscape') {
+                pageWidthMm = paper.width - marginMm - pageSafetyMm;
+                pageHeightMm = paper.height - marginMm - pageSafetyMm;
+            } else {
+                pageWidthMm = paper.height - marginMm - pageSafetyMm;
+                pageHeightMm = paper.width - marginMm - pageSafetyMm;
             }
 
-            const numPages = rowBreaks.length + 1;
-            const dataRows = lastRow;
-            const rowsPerPage = Math.ceil(dataRows / numPages);
-            for (let p = 1; p <= numPages; p++) {
-                const startRow = 2 + (p - 1) * rowsPerPage;
-                const endRow = Math.min(startRow + rowsPerPage - 1, lastRow + 1);
-                if (startRow <= lastRow + 1) {
-                    worksheet.mergeCells(startRow, 1, endRow, 1);
-                    const cell = worksheet.getCell(startRow, 1);
-                    cell.value = 'СТРОКА ' + p;
-                    cell.font = { size: 18, bold: true, color: { argb: 'FF0000FF' } };
-                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF00FFFF' } };
+            const firstDataCol = 2;
+            const lastDataCol = lastCol + 1;
+            const firstDataRow = 2;
+            const lastDataRow = lastRow + 1;
+            const markerMm = columnWidthToMm(LABEL_COL_WIDTH);
+            const headerMm = rowHeightToMm(HEADER_ROW_HEIGHT);
+
+            const sections = packBySize(firstDataCol, lastDataCol, col => {
+                return columnWidthToMm(worksheet.getColumn(col).width);
+            }, pageWidthMm, markerMm);
+            const pages = packBySize(firstDataRow, lastDataRow, row => {
+                return rowHeightToMm(worksheet.getRow(row).height);
+            }, pageHeightMm, headerMm);
+
+            const sectionFont = { size: 24, bold: true, color: { argb: 'FFFF0000' } };
+            const sectionFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } };
+            const sectionAlign = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            sections.forEach((range, index) => {
+                writeLabel(
+                    worksheet, 1, range[0], 1, range[1],
+                    'СЕКЦИЯ ' + (index + 1) + ' ➔',
+                    sectionFont, sectionFill, sectionAlign
+                );
+            });
+
+            const rowFont = { size: 18, bold: true, color: { argb: 'FF0000FF' } };
+            const rowFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF00FFFF' } };
+            const rowAlign = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            pages.forEach((range, index) => {
+                writeLabel(
+                    worksheet, range[0], 1, range[1], 1,
+                    'СТРОКА ' + (index + 1),
+                    rowFont, rowFill, rowAlign
+                );
+            });
+
+            const corner = worksheet.getCell(1, 1);
+            corner.value = 'СГИБ';
+            corner.font = { size: 12, bold: true, color: { argb: 'FF2D3748' } };
+            corner.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            corner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7FAFC' } };
+
+            for (let s = 0; s < sections.length; s++) {
+                if (s > 0) {
+                    const col = sections[s][0];
+                    for (let r = 1; r <= lastDataRow; r++) setEdge(worksheet.getCell(r, col), 'left');
+                }
+                if (s < sections.length - 1) {
+                    const col = sections[s][1];
+                    for (let r = 1; r <= lastDataRow; r++) setEdge(worksheet.getCell(r, col), 'right');
+                }
+            }
+            for (let p = 0; p < pages.length; p++) {
+                if (p > 0) {
+                    const row = pages[p][0];
+                    for (let c = 1; c <= lastDataCol; c++) setEdge(worksheet.getCell(row, c), 'top');
+                }
+                if (p < pages.length - 1) {
+                    const row = pages[p][1];
+                    for (let c = 1; c <= lastDataCol; c++) setEdge(worksheet.getCell(row, c), 'bottom');
+                    worksheet.getRow(row).addPageBreak();
                 }
             }
 
             worksheet.pageSetup = {
                 orientation: orientation,
                 paperSize: paper.paperCode,
+                scale: 100,
+                fitToPage: false,
+                pageOrder: 'overThenDown',
                 printTitlesRow: '1:1',
                 printTitlesColumn: 'A:A',
-                margins: { left: 0.5, right: 0.5, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 }
+                horizontalCentered: false,
+                verticalCentered: false,
+                margins: {
+                    left: PAGE_MARGIN_IN,
+                    right: PAGE_MARGIN_IN,
+                    top: PAGE_MARGIN_IN,
+                    bottom: PAGE_MARGIN_IN,
+                    header: 0.3,
+                    footer: 0.3
+                }
             };
 
-            const redThick = { style: 'thick', color: { argb: 'FFFF0000' } };
-            colBreaks.forEach(col => {
-                const actualCol = col + 1;
-                for (let r = 1; r <= lastRow + 1; r++) {
-                    const cell = worksheet.getCell(r, actualCol);
-                    const currentBorder = cell.border || {};
-                    cell.border = { ...currentBorder, left: redThick };
-                }
-            });
-            rowBreaks.forEach(row => {
-                const actualRow = row + 1;
-                for (let c = 1; c <= lastCol + 1; c++) {
-                    const cell = worksheet.getCell(actualRow, c);
-                    const currentBorder = cell.border || {};
-                    cell.border = { ...currentBorder, top: redThick };
-                }
-            });
+            worksheet.views = [{
+                workbookViewId: 0,
+                state: 'normal',
+                style: 'pageBreakPreview',
+                showGridLines: true,
+                zoomScale: 100,
+                zoomScaleNormal: 100
+            }];
 
-            return { sections: numSections, pages: numPages };
+            const colBreaks = [];
+            for (let s = 0; s < sections.length - 1; s++) colBreaks.push(sections[s][1]);
+            worksheet._harmonicaColBreaks = colBreaks;
+
+            return { sections: sections.length, pages: pages.length };
         }
 
         async function downloadResult() {
@@ -574,12 +757,18 @@
                 showToast('error', 'Нет результата', 'Сначала обработайте файл');
                 return;
             }
-            const buffer = await processedWorkbook.xlsx.writeBuffer();
-            const blob = new Blob([buffer], {
-                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            });
-            saveAs(blob, originalFileName + '_harmonica.xlsx');
-            showToast('success', 'Скачивание начато', 'Файл сохранён');
+            try {
+                const raw = await processedWorkbook.xlsx.writeBuffer();
+                const buffer = await injectColumnBreaks(raw, processedWorkbook);
+                const blob = new Blob([buffer], {
+                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                });
+                saveAs(blob, originalFileName + '_harmonica.xlsx');
+                showToast('success', 'Скачивание начато', 'Файл сохранён');
+            } catch (error) {
+                console.error(error);
+                showToast('error', 'Ошибка сохранения', error.message);
+            }
         }
     </script>
 </body>
