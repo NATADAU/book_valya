@@ -297,7 +297,7 @@
 
         <div class="footer">
             <p>Сделано с ❤️ для удобной печати больших таблиц</p>
-            <p>Версия 1.3</p>
+            <p>Версия 1.4</p>
         </div>
     </div>
 
@@ -585,6 +585,164 @@
             return zip.generateAsync({ type: 'arraybuffer' });
         }
 
+        function columnNumber(letters) {
+            let n = 0;
+            const text = String(letters).toUpperCase();
+            for (let i = 0; i < text.length; i++) {
+                const code = text.charCodeAt(i);
+                if (code < 65 || code > 90) return 0;
+                n = n * 26 + (code - 64);
+            }
+            return n;
+        }
+
+        function columnLetters(n) {
+            let s = '';
+            let num = n;
+            while (num > 0) {
+                const rem = (num - 1) % 26;
+                s = String.fromCharCode(65 + rem) + s;
+                num = Math.floor((num - 1) / 26);
+            }
+            return s;
+        }
+
+        function sheetPrefixMatches(prefix, sheetName) {
+            if (!prefix) return true;
+            let name = prefix.slice(0, -1);
+            if (name.charAt(0) === "'" && name.charAt(name.length - 1) === "'") {
+                name = name.slice(1, -1).replace(/''/g, "'");
+            }
+            return name.toLowerCase() === String(sheetName).toLowerCase();
+        }
+
+        function parseCellRefAt(text, index) {
+            let k = index;
+            let sheet = '';
+            if (text.charAt(k) === "'") {
+                let j = k + 1;
+                while (j < text.length) {
+                    if (text.charAt(j) === "'") {
+                        if (text.charAt(j + 1) === "'") { j += 2; continue; }
+                        j += 1;
+                        break;
+                    }
+                    j += 1;
+                }
+                if (text.charAt(j) !== '!') return null;
+                sheet = text.slice(k, j + 1);
+                k = j + 1;
+            } else if (/[A-Za-z_\u0400-\u04FF]/.test(text.charAt(k))) {
+                const ident = /^[A-Za-z_\u0400-\u04FF][A-Za-z0-9_.\u0400-\u04FF]*/.exec(text.slice(k));
+                if (ident && text.charAt(k + ident[0].length) === '!') {
+                    sheet = ident[0] + '!';
+                    k = k + ident[0].length + 1;
+                }
+            }
+
+            const match = /^(\$?)([A-Za-z]{1,3})(\$?)([1-9][0-9]{0,6})/.exec(text.slice(k));
+            if (!match) return null;
+            const next = k + match[0].length;
+            const nextCh = text.charAt(next);
+            if (nextCh && /[A-Za-z0-9_(]/.test(nextCh)) return null;
+            const col = columnNumber(match[2]);
+            const row = parseInt(match[4], 10);
+            if (!col || col > 16384 || row > 1048576) return null;
+            return {
+                sheet: sheet,
+                colAbs: match[1] === '$',
+                rowAbs: match[3] === '$',
+                col: col,
+                row: row,
+                next: next
+            };
+        }
+
+        function shiftFormulaRefs(formula, dCol, dRow, sheetName) {
+            const text = String(formula);
+            let out = '';
+            let i = 0;
+            while (i < text.length) {
+                if (text.charAt(i) === '"') {
+                    let j = i + 1;
+                    while (j < text.length) {
+                        if (text.charAt(j) === '"') {
+                            if (text.charAt(j + 1) === '"') { j += 2; continue; }
+                            j += 1;
+                            break;
+                        }
+                        j += 1;
+                    }
+                    out += text.slice(i, j);
+                    i = j;
+                    continue;
+                }
+                const ref = parseCellRefAt(text, i);
+                if (!ref) {
+                    out += text.charAt(i);
+                    i += 1;
+                    continue;
+                }
+                if (!sheetPrefixMatches(ref.sheet, sheetName)) {
+                    out += text.slice(i, ref.next);
+                    i = ref.next;
+                    continue;
+                }
+                let col = ref.col + dCol;
+                let row = ref.row + dRow;
+                if (col < 1) col = 1;
+                if (col > 16384) col = 16384;
+                if (row < 1) row = 1;
+                if (row > 1048576) row = 1048576;
+                out += (ref.sheet || '')
+                    + (ref.colAbs ? '$' : '')
+                    + columnLetters(col)
+                    + (ref.rowAbs ? '$' : '')
+                    + row;
+                i = ref.next;
+            }
+            return out;
+        }
+
+        function formulaResultForWrite(result) {
+            if (result == null) return undefined;
+            if (typeof result === 'number' || typeof result === 'string' || typeof result === 'boolean') return result;
+            if (result instanceof Date) return result;
+            if (typeof result === 'object' && result.error) return result;
+            return undefined;
+        }
+
+        function prepareFormulasForInsert(worksheet) {
+            const pending = [];
+            worksheet.eachRow(row => {
+                row.eachCell(cell => {
+                    const kind = cell.formulaType;
+                    if (kind !== 1 && kind !== 2) return;
+                    let formula = '';
+                    try {
+                        formula = cell.formula || '';
+                    } catch (e) {
+                        formula = '';
+                    }
+                    if (!formula) {
+                        const result = formulaResultForWrite(cell.result);
+                        pending.push({ cell: cell, value: result == null ? null : result });
+                        return;
+                    }
+                    pending.push({
+                        cell: cell,
+                        value: {
+                            formula: shiftFormulaRefs(formula, 1, 1, worksheet.name),
+                            result: formulaResultForWrite(cell.result)
+                        }
+                    });
+                });
+            });
+            pending.forEach(item => {
+                item.cell.value = item.value;
+            });
+        }
+
         async function processSheet(worksheet, columnWidth, dataFontSize, paperSize, orientation) {
             const lastCol = worksheet.columnCount;
             const lastRow = worksheet.rowCount;
@@ -631,6 +789,10 @@
                 });
                 row.height = maxHeight;
             });
+
+            // Общие формулы ExcelJS не переживают вставку строки и столбца: запись файла падает.
+            // Сначала раскрываем их в обычные и сдвигаем ссылки на новую строку и столбец подписей.
+            prepareFormulasForInsert(worksheet);
 
             // В ExcelJS 4.3 нет insertColumn. Пустой массив — один новый столбец, старые сдвигаются вправо.
             worksheet.spliceColumns(1, 0, []);
